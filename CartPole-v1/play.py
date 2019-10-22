@@ -23,7 +23,7 @@ def discount_rewards(r, gamma=0.8):
 env = gym.make('CartPole-v1')
 num_actions = env.action_space.n
 num_observ = env.observation_space.shape
-best_result = 500.0
+best_result = 495.0
 episodes = 1000
 scores = []
 update_every = 1
@@ -34,7 +34,6 @@ optimizer = tf.keras.optimizers.Adam(learning_rate=0.005)
 class Attended(tf.keras.Model):
     def __init__(self):
         super(Attended, self).__init__(name='')
-
         self.dense1 = tf.keras.layers.Dense(128, input_dim=num_observ, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001))
         self.dropout1 = tf.keras.layers.Dropout(0.5)
         self.dense2 = tf.keras.layers.Dense(128, input_dim=128, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001))
