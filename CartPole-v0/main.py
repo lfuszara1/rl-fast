@@ -2,6 +2,8 @@ import numpy as np
 import gym
 import tensorflow as tf
 
+import random
+
 gpus = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_virtual_device_configuration(gpus[0], [
     tf.config.experimental.VirtualDeviceConfiguration(memory_limit=1024)])
@@ -21,10 +23,11 @@ def discount_rewards(r, gamma=0.8):
 env = gym.make('CartPole-v0')
 num_actions = env.action_space.n
 num_observ = env.observation_space.shape
-
+best_result = 200.0
 episodes = 500
 scores = []
 update_every = 1
+epsilon = 0.01
 optimizer = tf.keras.optimizers.Adam(learning_rate=0.005)
 
 
@@ -52,64 +55,58 @@ class Attended(tf.keras.Model):
         return out
 
 
-logic_br = False
-best_result = 195.0
-while not logic_br:
-    for i in range(0, 3):
-        model = Attended()
-        model.build((None, num_observ[0]))
+model = Attended()
+model.build((None, num_observ[0]))
 
-        grad_buffer = model.trainable_variables
+grad_buffer = model.trainable_variables
+for ix, grad in enumerate(grad_buffer):
+    grad_buffer[ix] = grad * 0
+
+counter = 0
+for e in range(episodes):
+    s = env.reset()
+    ep_memory = []
+    ep_score = 0
+    done = False
+    while not done:
+        env.render()
+        s = s.reshape([1, 4])
+        with tf.GradientTape() as tape:
+            logits = model(s)
+            a_dist = logits.numpy()
+            if random.uniform(0.0, 1.0) < epsilon:
+                a = random.randint(0, num_actions-1)
+            else:
+                a = np.random.choice(a_dist[0], p=a_dist[0])
+                a = np.argmax(a_dist == a)
+            loss = compute_loss([a], logits)
+        s, r, done, _ = env.step(a)
+        ep_score += r
+        if done: r -= 100
+        grads = tape.gradient(loss, model.trainable_variables)
+        ep_memory.append([grads, r])
+    scores.append(ep_score)
+    ep_memory = np.array(ep_memory)
+    ep_memory[:, 1] = discount_rewards(ep_memory[:, 1])
+
+    for grads, r in ep_memory:
+        for ix, grad in enumerate(grads):
+            grad_buffer[ix] += grad * r
+
+    if e % update_every == 0:
+        optimizer.apply_gradients(zip(grad_buffer, model.trainable_variables))
         for ix, grad in enumerate(grad_buffer):
             grad_buffer[ix] = grad * 0
 
-        counter = 0
-        for e in range(episodes):
-            s = env.reset()
-            ep_memory = []
-            ep_score = 0
-            done = False
-            while not done:
-                env.render()
-                s = s.reshape([1, 4])
-                with tf.GradientTape() as tape:
-                    logits = model(s)
-                    a_dist = logits.numpy()
-                    # Choose random action with p = action dist
-                    a = np.random.choice(a_dist[0], p=a_dist[0])
-                    a = np.argmax(a_dist == a)
-                    loss = compute_loss([a], logits)
-                s, r, done, _ = env.step(a)
-                ep_score += r
-                if done: r -= 100
-                grads = tape.gradient(loss, model.trainable_variables)
-                ep_memory.append([grads, r])
-            scores.append(ep_score)
-            ep_memory = np.array(ep_memory)
-            ep_memory[:, 1] = discount_rewards(ep_memory[:, 1])
+    if e % 10 == 0:
+        print("Episode  {}  Score  {} Max {}".format(e, np.mean(scores[-10:]), np.max(scores[-10:])))
 
-            for grads, r in ep_memory:
-                for ix, grad in enumerate(grads):
-                    grad_buffer[ix] += grad * r
+    if np.mean(scores[-10:]) >= best_result:
+        print("Episode {} Success {}".format(e, scores[-1:][0]))
+        counter += 1
 
-            if e % update_every == 0:
-                optimizer.apply_gradients(zip(grad_buffer, model.trainable_variables))
-                for ix, grad in enumerate(grad_buffer):
-                    grad_buffer[ix] = grad * 0
-
-            if e % 10 == 0:
-                print("Episode  {}  Score  {} Max {} Best {}".format(e, np.mean(scores[-10:]), np.max(scores[-10:]), best_result))
-
-            if np.mean(scores[-10:]) >= best_result:
-                print("Episode {} Success {}".format(e, scores[-1:][0]))
-                counter += 1
-            if counter == 10:
-                logic_br = True
-                break
-        if logic_br:
-            break
-    best_result -= 5.0
-
+    if counter == 10:
+        break
 env.close()
 
 model.save_weights('./checkpoints/attended')

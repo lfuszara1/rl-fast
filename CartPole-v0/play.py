@@ -2,7 +2,7 @@ import numpy as np
 import gym
 import tensorflow as tf
 
-import time
+import random
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_virtual_device_configuration(gpus[0], [
@@ -23,8 +23,12 @@ def discount_rewards(r, gamma=0.8):
 env = gym.make('CartPole-v0')
 num_actions = env.action_space.n
 num_observ = env.observation_space.shape
-
+best_result = 200.0
 episodes = 1000
+scores = []
+update_every = 1
+epsilon = 0.01
+optimizer = tf.keras.optimizers.Adam(learning_rate=0.005)
 
 
 class Attended(tf.keras.Model):
@@ -53,6 +57,7 @@ class Attended(tf.keras.Model):
 
 model = Attended()
 model.build((None, num_observ[0]))
+
 model.load_weights('./checkpoints/attended')
 
 counter = 0
