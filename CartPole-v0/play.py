@@ -61,17 +61,19 @@ model.load_weights('./checkpoints/attended')
 
 counter = 0
 for e in range(episodes):
-    s = env.reset()
-    s = s.reshape([1, 4])
+    done = False
+    while not done:
+        s = env.reset()
+        s = s.reshape([1, 4])
 
-    r = model(s)
-    a_dist = r.numpy()
+        r = model(s)
+        a_dist = r.numpy()
 
-    a = np.random.choice(a_dist[0], p=a_dist[0])
-    a = np.argmax(a_dist == a)
+        a = np.random.choice(a_dist[0], p=a_dist[0])
+        a = np.argmax(a_dist == a)
 
-    s, r, done, _ = env.step(a)
-    env.render()
+        s, r, done, _ = env.step(a)
+        env.render()
     counter += r
 
 env.close()

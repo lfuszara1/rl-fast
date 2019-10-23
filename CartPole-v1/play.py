@@ -78,7 +78,7 @@ for e in range(episodes):
 
         s, r, done, _ = env.step(a)
         env.render()
-        counter += r
+    counter += r
 
 
 env.close()
