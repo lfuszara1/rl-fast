@@ -34,9 +34,11 @@ optimizer = tf.keras.optimizers.Adam(learning_rate=0.005)
 class Attended(tf.keras.Model):
     def __init__(self):
         super(Attended, self).__init__(name='')
-        self.dense1 = tf.keras.layers.Dense(128, input_dim=num_observ, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.dense1 = tf.keras.layers.Dense(128, input_dim=num_observ, kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.lrelu1 = tf.keras.layers.LeakyReLU()
         self.dropout1 = tf.keras.layers.Dropout(0.5)
-        self.dense2 = tf.keras.layers.Dense(128, input_dim=128, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.dense2 = tf.keras.layers.Dense(128, input_dim=128, kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.lrelu2 = tf.keras.layers.LeakyReLU()
         self.dropout2 = tf.keras.layers.Dropout(0.5)
 
         self.attention = tf.keras.layers.Attention(128)
@@ -44,8 +46,10 @@ class Attended(tf.keras.Model):
 
     def call(self, inputs):
         x1 = self.dense1(inputs)
+        x1 = self.lrelu1(x1)
         x1 = self.dropout1(x1)
         x2 = self.dense2(x1)
+        x2 = self.lrelu2(x2)
         x2 = self.dropout2(x2)
 
         x = self.attention([x1, x2])
@@ -61,18 +65,21 @@ model.load_weights('./checkpoints/attended')
 
 counter = 0
 for e in range(episodes):
-    s = env.reset()
-    s = s.reshape([1, 4])
+    done = False
+    while not done:
+        s = env.reset()
+        s = s.reshape([1, 4])
 
-    r = model(s)
-    a_dist = r.numpy()
+        r = model(s)
+        a_dist = r.numpy()
 
-    a = np.random.choice(a_dist[0], p=a_dist[0])
-    a = np.argmax(a_dist == a)
+        a = np.random.choice(a_dist[0], p=a_dist[0])
+        a = np.argmax(a_dist == a)
 
-    s, r, done, _ = env.step(a)
-    env.render()
-    counter += r
+        s, r, done, _ = env.step(a)
+        env.render()
+        counter += r
+
 
 env.close()
 

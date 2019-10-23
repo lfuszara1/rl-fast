@@ -24,7 +24,7 @@ env = gym.make('CartPole-v1')
 num_actions = env.action_space.n
 num_observ = env.observation_space.shape
 best_result = 495.0
-episodes = 500
+episodes = 1000
 scores = []
 update_every = 1
 epsilon = 0.01
@@ -34,9 +34,11 @@ optimizer = tf.keras.optimizers.Adam(learning_rate=0.01)
 class Attended(tf.keras.Model):
     def __init__(self):
         super(Attended, self).__init__(name='')
-        self.dense1 = tf.keras.layers.Dense(128, input_dim=num_observ, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.dense1 = tf.keras.layers.Dense(128, input_dim=num_observ, kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.lrelu1 = tf.keras.layers.LeakyReLU()
         self.dropout1 = tf.keras.layers.Dropout(0.5)
-        self.dense2 = tf.keras.layers.Dense(128, input_dim=128, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.dense2 = tf.keras.layers.Dense(128, input_dim=128, kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.lrelu2 = tf.keras.layers.LeakyReLU()
         self.dropout2 = tf.keras.layers.Dropout(0.5)
 
         self.attention = tf.keras.layers.Attention(128)
@@ -44,8 +46,10 @@ class Attended(tf.keras.Model):
 
     def call(self, inputs):
         x1 = self.dense1(inputs)
+        x1 = self.lrelu1(x1)
         x1 = self.dropout1(x1)
         x2 = self.dense2(x1)
+        x2 = self.lrelu2(x2)
         x2 = self.dropout2(x2)
 
         x = self.attention([x1, x2])
@@ -100,11 +104,11 @@ for e in range(episodes):
     if e % 10 == 0:
         print("Episode  {}  Score  {} Max {}".format(e, np.mean(scores[-10:]), np.max(scores[-10:])))
 
-    if np.mean(scores[-10:]) >= best_result:
+    if np.mean(scores[-2:]) >= best_result:
         print("Episode {} Success {}".format(e, scores[-1:][0]))
         counter += 1
 
-    if counter == 10:
+    if counter == 2:
         break
 env.close()
 
