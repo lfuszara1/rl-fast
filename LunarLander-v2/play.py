@@ -20,10 +20,10 @@ def discount_rewards(r, gamma=0.8):
     return discounted_r
 
 
-env = gym.make('Breakout-ram-v0')
+env = gym.make('LunarLander-v2')
 num_actions = env.action_space.n
 num_observ = env.observation_space.shape
-best_result = 495.0
+best_result = 200.0
 episodes = 1000
 scores = []
 update_every = 1
@@ -32,33 +32,48 @@ optimizer = tf.keras.optimizers.Adam(learning_rate=0.005)
 
 
 class Attended(tf.keras.Model):
-    def __init__(self):
+    def __init__(self, num_attention):
         super(Attended, self).__init__(name='')
-        self.dense1 = tf.keras.layers.Dense(128, input_dim=num_observ, kernel_regularizer=tf.keras.regularizers.l2(0.001))
-        self.lrelu1 = tf.keras.layers.LeakyReLU()
-        self.dropout1 = tf.keras.layers.Dropout(0.5)
-        self.dense2 = tf.keras.layers.Dense(128, input_dim=128, kernel_regularizer=tf.keras.regularizers.l2(0.001))
-        self.lrelu2 = tf.keras.layers.LeakyReLU()
-        self.dropout2 = tf.keras.layers.Dropout(0.5)
+        
+        self.num_attention = num_attention
 
-        self.attention = tf.keras.layers.Attention(128)
+        self.attentions = []
+        for _ in range(num_attention):
+            dense1 = tf.keras.layers.Dense(128, input_dim=128, kernel_regularizer=tf.keras.regularizers.l2(0.001))
+            lrelu1 = tf.keras.layers.LeakyReLU()
+            dropout1 = tf.keras.layers.Dropout(0.5)
+            dense2 = tf.keras.layers.Dense(128, input_dim=128, kernel_regularizer=tf.keras.regularizers.l2(0.001))
+            lrelu2 = tf.keras.layers.LeakyReLU()
+            dropout2 = tf.keras.layers.Dropout(0.5)
+            attention = tf.keras.layers.Attention(128)
+            
+            self.attentions.append([dense1, lrelu1, dropout1, dense2, lrelu2, dropout2, attention])
+
         self.softmax = tf.keras.layers.Dense(num_actions, input_dim=128, activation='softmax')
 
     def call(self, inputs):
-        x1 = self.dense1(inputs)
-        x1 = self.lrelu1(x1)
-        x1 = self.dropout1(x1)
-        x2 = self.dense2(x1)
-        x2 = self.lrelu2(x2)
-        x2 = self.dropout2(x2)
 
-        x = self.attention([x1, x2])
-        out = self.softmax(x)
+        x1 = []
+        x2 = []
+        xa = []
+        for i, j in enumerate(self.attentions):
+            if i == 0:
+                x1.append(j[0](inputs))
+            else:
+                x1.append(j[0](xa[-1]))
+            x1.append(j[1](x1[-1]))
+            x1.append(j[2](x1[-1]))
+            x2.append(j[3](x1[-1]))
+            x2.append(j[4](x2[-1]))
+            x2.append(j[5](x2[-1]))
+            xa.append(j[6]([x1[-1], x2[-1]]))
+
+        out = self.softmax(xa[-1])
 
         return out
 
 
-model = Attended()
+model = Attended(1)
 model.build((None, num_observ[0]))
 
 model.load_weights('./checkpoints/attended')
@@ -68,7 +83,7 @@ for e in range(episodes):
     done = False
     while not done:
         s = env.reset()
-        s = s.reshape([1, 128])
+        s = s.reshape([1, num_observ[0]])
 
         r = model(s)
         a_dist = r.numpy()
@@ -78,7 +93,7 @@ for e in range(episodes):
 
         s, r, done, _ = env.step(a)
         env.render()
-    counter += r
+        counter += r
 
 
 env.close()
