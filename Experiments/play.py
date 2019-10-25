@@ -27,8 +27,8 @@ best_result = 200.0
 episodes = 1000
 scores = []
 update_every = 1
-epsilon = 1.0
-optimizer = tf.keras.optimizers.Adam(learning_rate=0.01, clipvalue=1.0)
+epsilon = 0.01
+optimizer = tf.keras.optimizers.Adam(learning_rate=0.005)
 
 
 class Attended(tf.keras.Model):
@@ -45,13 +45,14 @@ class Attended(tf.keras.Model):
             dense2 = tf.keras.layers.Dense(128, input_dim=128, kernel_regularizer=tf.keras.regularizers.l2(0.001))
             lrelu2 = tf.keras.layers.LeakyReLU()
             dropout2 = tf.keras.layers.Dropout(0.5)
-            attentione = tf.keras.layers.Attention(128)
+            attention = tf.keras.layers.Attention(128)
             
-            self.attentions.append([dense1, lrelu1, dropout1, dense2, lrelu2, dropout2, attentione])
+            self.attentions.append([dense1, lrelu1, dropout1, dense2, lrelu2, dropout2, attention])
 
         self.softmax = tf.keras.layers.Dense(num_actions, input_dim=128, activation='softmax')
 
     def call(self, inputs):
+
         x1 = []
         x2 = []
         xa = []
@@ -72,63 +73,29 @@ class Attended(tf.keras.Model):
         return out
 
 
-model = Attended(4)
+model = Attended(1)
 model.build((None, num_observ[0]))
 
-grad_buffer = model.trainable_variables
-for ix, grad in enumerate(grad_buffer):
-    grad_buffer[ix] = grad * 0
+model.load_weights('./checkpoints/attended')
 
 counter = 0
-epsilon_gradient = epsilon
 for e in range(episodes):
-    s = env.reset()
-    ep_memory = []
-    ep = 0
-    ep_score = 1
     done = False
     while not done:
-        ep += 1
-        env.render()
+        s = env.reset()
         s = s.reshape([1, num_observ[0]])
-        with tf.GradientTape() as tape:
-            logits = model(s)
-            a_dist = logits.numpy()
-            if epsilon > 0.0 and random.uniform(0.0, 1.0) < epsilon:
-                a = random.randint(0, num_actions-1)
-            else:
-                a = np.random.choice(a_dist[0], p=a_dist[0])
-                a = np.argmax(a_dist == a)
-            loss = compute_loss([a], logits)
+
+        r = model(s)
+        a_dist = r.numpy()
+
+        a = np.random.choice(a_dist[0], p=a_dist[0])
+        a = np.argmax(a_dist == a)
+
         s, r, done, _ = env.step(a)
-        ep_score += r
-        grads = tape.gradient(loss, model.trainable_variables)       
-        ep_memory.append([grads, ep_score + ep])
-    scores.append(ep_score)
-    ep_memory = np.array(ep_memory)
-    ep_memory[:, 1] = discount_rewards(ep_memory[:, 1])
+        env.render()
+        counter += r
 
-    for grads, r in ep_memory:
-        for ix, grad in enumerate(grads):
-            grad_buffer[ix] += grad * r
 
-    if e % update_every == 0:
-        optimizer.apply_gradients(zip(grad_buffer, model.trainable_variables))
-        for ix, grad in enumerate(grad_buffer):
-            grad_buffer[ix] = grad * 0
-
-    if e % 10 == 0:
-        print("Episode  {}  Score  {} Max {}".format(e, np.mean(scores[-10:]), np.max(scores[-10:])))
-
-    if np.mean(scores[-2:]) >= best_result:
-        print("Episode {} Success {}".format(e, scores[-1:][0]))
-        counter += 1
-
-    if counter == 2:
-        break
-
-    epsilon_gradient -= 0.02
 env.close()
 
-model.save_weights('./checkpoints/attended')
-
+print("Episodes {} Total score {}".format(episodes, float(counter) / episodes))
