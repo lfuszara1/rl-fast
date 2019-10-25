@@ -62,6 +62,8 @@ class Attended(tf.keras.Model):
 
         out = self.softmax(xo)
 
+        memory = self.lrelu3(memory)
+
         return out, memory
 
 
@@ -88,7 +90,7 @@ for e in range(episodes):
         with tf.GradientTape() as tape:
             logits, m = model(s, m)
             a_dist = logits.numpy()
-            if epsilon > 0.0 and random.uniform(0.0, 1.0) < epsilon_gradient:
+            if epsilon_gradient > 0.0 and random.uniform(0.0, 1.0) < epsilon_gradient:
                 a = random.randint(0, num_actions-1)
             else:
                 a = np.random.choice(a_dist[0], p=a_dist[0])
