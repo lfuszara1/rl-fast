@@ -17,80 +17,73 @@ def discount_rewards(r, gamma=0.8):
     for t in reversed(range(0, r.size)):
         running_add = running_add * gamma + r[t]
         discounted_r[t] = running_add
+
+    discounted_r -= np.mean(discounted_r)
+    discounted_r /= np.std(discounted_r)
+
     return discounted_r
 
 
 env = gym.make('LunarLander-v2')
 num_actions = env.action_space.n
-num_observ = env.observation_space.shape
-best_result = 200.0
-episodes = 10000
+num_observ = env.observation_space.shape[0]
+best_result = 0.0
+episodes = 1000
 scores = []
-update_every = 10
-epsilon = 1.0
+update_every = 1
+epsilon = 0.01
 optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
 
 
 class Attended(tf.keras.Model):
     def __init__(self):
         super(Attended, self).__init__(name='')
-
-        self.dense1 = tf.keras.layers.Dense(128, kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.dense1 = tf.keras.layers.Dense(256, kernel_regularizer=tf.keras.regularizers.l2(0.001))
         self.lrelu1 = tf.keras.layers.LeakyReLU()
         self.dropout1 = tf.keras.layers.Dropout(0.5)
-        self.dense2 = tf.keras.layers.Dense(128, kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.dense2 = tf.keras.layers.Dense(256, kernel_regularizer=tf.keras.regularizers.l2(0.001))
         self.lrelu2 = tf.keras.layers.LeakyReLU()
         self.dropout2 = tf.keras.layers.Dropout(0.5)
-        self.attentione = tf.keras.layers.Attention(128)
+
+        self.attention = tf.keras.layers.Attention(256)
 
         self.softmax = tf.keras.layers.Dense(num_actions, activation='softmax')
 
-    def call(self, inputs, memory=[]):
+    def call(self, inputs):
         x1 = self.dense1(inputs)
         x1 = self.lrelu1(x1)
-        x1 = self.dropout1(x1)  
+        x1 = self.dropout1(x1)
         x2 = self.dense2(x1)
         x2 = self.lrelu2(x2)
         x2 = self.dropout2(x2)
 
-        if tf.is_tensor(memory):
-            xo = self.attentione([memory, x1, x2])
-        else:
-            xo = self.attentione([x1, x2])
+        x = self.attention([x1, x2])
 
-        memory = xo
+        out = self.softmax(x)
 
-        out = self.softmax(xo)
-
-        memory = self.lrelu3(memory)
-
-        return out, memory
+        return out
 
 
 model = Attended()
-model.build((None, num_observ[0]))
+model.build((None, num_observ))
 
 grad_buffer = model.trainable_variables
 for ix, grad in enumerate(grad_buffer):
     grad_buffer[ix] = grad * 0
 
 counter = 0
-epsilon_gradient = epsilon
 for e in range(episodes):
     s = env.reset()
     ep_memory = []
-    ep = 0
-    ep_score = 1
+    ep_score = 0
     done = False
-    m = []
     while not done:
-        ep += 1
         env.render()
-        s = s.reshape([1, num_observ[0]])
+        s = s.reshape([1, num_observ])
         with tf.GradientTape() as tape:
-            logits, m = model(s, m)
+            logits = model(s)
             a_dist = logits.numpy()
-            if epsilon_gradient > 0.0 and random.uniform(0.0, 1.0) < epsilon_gradient:
+            if random.uniform(0.0, 1.0) < epsilon:
                 a = random.randint(0, num_actions-1)
             else:
                 a = np.random.choice(a_dist[0], p=a_dist[0])
@@ -98,8 +91,8 @@ for e in range(episodes):
             loss = compute_loss([a], logits)
         s, r, done, _ = env.step(a)
         ep_score += r
-        grads = tape.gradient(loss, model.trainable_variables)       
-        ep_memory.append([grads, ep_score + ep])
+        grads = tape.gradient(loss, model.trainable_variables)
+        ep_memory.append([grads, r])
     scores.append(ep_score)
     ep_memory = np.array(ep_memory)
     ep_memory[:, 1] = discount_rewards(ep_memory[:, 1])
@@ -116,14 +109,14 @@ for e in range(episodes):
     if e % 10 == 0:
         print("Episode  {}  Score  {} Max {}".format(e, np.mean(scores[-10:]), np.max(scores[-10:])))
 
-    if np.mean(scores[-2:]) >= best_result:
+    if np.mean(scores[-10:]) >= best_result:
         print("Episode {} Success {}".format(e, scores[-1:][0]))
         counter += 1
+    else:
+        counter = 0
 
-    if counter == 2:
+    if counter == 10:
         break
-
-    epsilon_gradient -= 0.1
 env.close()
 
 model.save_weights('./checkpoints/attended')

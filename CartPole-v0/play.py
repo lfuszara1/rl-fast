@@ -8,74 +8,64 @@ gpus = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_virtual_device_configuration(gpus[0], [
     tf.config.experimental.VirtualDeviceConfiguration(memory_limit=1024)])
 
-compute_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-
-
-def discount_rewards(r, gamma=0.8):
-    discounted_r = np.zeros_like(r)
-    running_add = 0
-    for t in reversed(range(0, r.size)):
-        running_add = running_add * gamma + r[t]
-        discounted_r[t] = running_add
-    return discounted_r
-
 
 env = gym.make('CartPole-v0')
 num_actions = env.action_space.n
-num_observ = env.observation_space.shape
+num_observ = env.observation_space.shape[0]
 best_result = 195.0
-episodes = 1000
-scores = []
-update_every = 1
-epsilon = 0.01
-optimizer = tf.keras.optimizers.Adam(learning_rate=0.005)
+episodes = 100
 
 
 class Attended(tf.keras.Model):
     def __init__(self):
         super(Attended, self).__init__(name='')
-        self.dense1 = tf.keras.layers.Dense(128, input_dim=num_observ, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.dense1 = tf.keras.layers.Dense(256, kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.lrelu1 = tf.keras.layers.LeakyReLU()
         self.dropout1 = tf.keras.layers.Dropout(0.5)
-        self.dense2 = tf.keras.layers.Dense(128, input_dim=128, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.dense2 = tf.keras.layers.Dense(256, kernel_regularizer=tf.keras.regularizers.l2(0.001))
+        self.lrelu2 = tf.keras.layers.LeakyReLU()
         self.dropout2 = tf.keras.layers.Dropout(0.5)
 
-        self.attention = tf.keras.layers.Attention(128)
-        self.softmax = tf.keras.layers.Dense(num_actions, input_dim=128, activation='softmax')
+        self.attention = tf.keras.layers.Attention(256)
+
+        self.softmax = tf.keras.layers.Dense(num_actions, activation='softmax')
 
     def call(self, inputs):
         x1 = self.dense1(inputs)
+        x1 = self.lrelu1(x1)
         x1 = self.dropout1(x1)
         x2 = self.dense2(x1)
+        x2 = self.lrelu2(x2)
         x2 = self.dropout2(x2)
 
         x = self.attention([x1, x2])
+
         out = self.softmax(x)
 
         return out
 
 
 model = Attended()
-model.build((None, num_observ[0]))
+model.build((None, num_observ))
 
 model.load_weights('./checkpoints/attended')
 
-counter = 0
+scores = []
 for e in range(episodes):
+    s = env.reset()
+    ep_score = 0
     done = False
     while not done:
-        s = env.reset()
-        s = s.reshape([1, 4])
-
-        r = model(s)
-        a_dist = r.numpy()
-
+        s = s.reshape([1, num_observ])
+        logits = model(s)
+        a_dist = logits.numpy()
         a = np.random.choice(a_dist[0], p=a_dist[0])
         a = np.argmax(a_dist == a)
-
         s, r, done, _ = env.step(a)
-        env.render()
-        counter += r
+        ep_score += r
+    scores.append(ep_score)
+    print(e, ep_score)
 
 env.close()
 
-print("Episodes {} Total score {}".format(episodes, float(counter) / episodes))
+print("Episodes {} Total score {}".format(episodes, np.mean(scores)))
