@@ -1,0 +1,2 @@
+model_checkpoint_path: "action_attended"
+all_model_checkpoint_paths: "action_attended"
