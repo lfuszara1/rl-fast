@@ -12,19 +12,19 @@ tf.keras.layers.Dropout(0.5)
 
 ### Decoder
 
-self.dense2 = tf.keras.layers.Dense(256, kernel_regularizer=tf.keras.regularizers.l2(0.001))
+tf.keras.layers.Dense(256, kernel_regularizer=tf.keras.regularizers.l2(0.001))
 
-self.lrelu2 = tf.keras.layers.LeakyReLU()
+tf.keras.layers.LeakyReLU()
 
-self.dropout2 = tf.keras.layers.Dropout(0.5)
+tf.keras.layers.Dropout(0.5)
 
 ### Interpreter
 
-self.attention = tf.keras.layers.Attention(256)
+tf.keras.layers.Attention(256)
 
 ### Manager
 
-self.softmax = tf.keras.layers.Dense(num_actions, activation='softmax')
+tf.keras.layers.Dense(num_actions, activation='softmax')
 
 ## Effects
 
