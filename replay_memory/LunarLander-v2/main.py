@@ -24,10 +24,10 @@ def discount_rewards(r, gamma=0.8):
     return discounted_r
 
 
-env = gym.make('CartPole-v1')
+env = gym.make('LunarLander-v2')
 num_actions = env.action_space.n
 num_observ = env.observation_space.shape[0]
-best_result = 300.0
+best_result = 200.0
 episodes = 100000
 scores = []
 update_every = 1
@@ -148,13 +148,13 @@ for e in range(episodes):
     if e % 10 == 0:
         print("Episode  {}  Score  {} Max {}".format(e, np.mean(scores[-10:]), np.max(scores[-10:])))
 
-    if np.mean(scores[-50:]) >= best_result and scores[-5:][0] >= best_result:
+    if np.mean(scores[-100:]) >= best_result and scores[-1:][0] >= best_result:
         print("Episode {} Success {}".format(e, scores[-1:][0]))
         counter += 1
     else:
         counter = 0
 
-    if counter == 50:
+    if counter == 100:
         break
 env.close()
 

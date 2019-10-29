@@ -12,8 +12,8 @@ tf.config.experimental.set_virtual_device_configuration(gpus[0], [
 env = gym.make('CartPole-v1')
 num_actions = env.action_space.n
 num_observ = env.observation_space.shape[0]
-best_result = 450.0
-episodes = 100
+best_result = 300.0
+episodes = 1000
 
 
 class Attended(tf.keras.Model):
@@ -56,6 +56,7 @@ for e in range(episodes):
     ep_score = 0
     done = False
     while not done:
+        env.render()
         s = s.reshape([1, num_observ])
         logits = model(s)
         a_dist = logits.numpy()
@@ -69,3 +70,4 @@ for e in range(episodes):
 env.close()
 
 print("Episodes {} Total score {}".format(episodes, np.mean(scores)))
+
